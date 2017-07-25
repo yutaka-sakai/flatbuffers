@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2014 Google Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -110,9 +110,17 @@ const LanguageParameters& GetLangParams(IDLOptions::Language lang) {
       "string",
       "bool ",
       "\n{\n",
+#if 0
       "struct ",
+#else
+      "class ",
+#endif
       " readonly ",
+#if 0
       "",
+#else
+      "sealed ",
+#endif
       "enum ",
       ",\n",
       " { get",
@@ -124,9 +132,15 @@ const LanguageParameters& GetLangParams(IDLOptions::Language lang) {
       "",
       "Position",
       "Offset",
+#if 0
       "__p.",
       "Table.",
       "?",
+#else
+      "",
+      "",
+      "",
+#endif
       "using global::System;\nusing global::FlatBuffers;\n\n",
       {
         nullptr,
@@ -787,6 +801,7 @@ void GenStruct(StructDef &struct_def, std::string *code_ptr) {
     code += lang_.unsubclassable_decl;
   }
   code += lang_.accessor_type + struct_def.name;
+#if 0
   if (lang_.language == IDLOptions::kCSharp) {
     code += " : IFlatbufferObject";
     code += lang_.open_curly;
@@ -803,6 +818,11 @@ void GenStruct(StructDef &struct_def, std::string *code_ptr) {
     code += struct_def.fixed ? "Struct" : "Table";
     code += lang_.open_curly;
   }
+#else
+  code += lang_.inheritance_marker;
+  code += struct_def.fixed ? "Struct" : "Table";
+  code += lang_.open_curly;
+#endif
   if (!struct_def.fixed) {
     // Generate a special accessor for the table that when used as the root
     // of a FlatBuffer
@@ -851,6 +871,7 @@ void GenStruct(StructDef &struct_def, std::string *code_ptr) {
     std::string type_name_dest = GenTypeNameDest(field.value.type);
     std::string conditional_cast = "";
     std::string optional = "";
+#if 0
     if (lang_.language == IDLOptions::kCSharp &&
         !struct_def.fixed &&
         (field.value.type.base_type == BASE_TYPE_STRUCT ||
@@ -860,14 +881,19 @@ void GenStruct(StructDef &struct_def, std::string *code_ptr) {
       optional = lang_.optional_suffix;
       conditional_cast = "(" + type_name_dest + optional + ")";
     }
+#endif
     std::string dest_mask = DestinationMask(field.value.type, true);
     std::string dest_cast = DestinationCast(field.value.type);
     std::string src_cast = SourceCast(field.value.type);
     std::string method_start = "  public " + type_name_dest + optional + " " +
                                MakeCamel(field.name, lang_.first_camel_upper);
+#if 0
     std::string obj = lang_.language == IDLOptions::kCSharp
       ? "(new " + type_name + "())"
       : "obj";
+#else
+    std::string obj = "obj";
+#endif
 
     // Most field accessors need to retrieve and test the field offset first,
     // this is the prefix code for that:
@@ -877,7 +903,18 @@ void GenStruct(StructDef &struct_def, std::string *code_ptr) {
     // Generate the accessors that don't do object reuse.
     if (field.value.type.base_type == BASE_TYPE_STRUCT) {
       // Calls the accessor that takes an accessor object with a new object.
+#if 0
       if (lang_.language != IDLOptions::kCSharp) {
+#else
+      if (lang_.language == IDLOptions::kCSharp) {
+        code += method_start + " { get { return Get";
+        code += MakeCamel(field.name, lang_.first_camel_upper);
+        code += "(new ";
+        code += type_name + "()); } }\n";
+        method_start = "  public " + type_name_dest + " Get" + MakeCamel(field.name, lang_.first_camel_upper);
+      }
+      else {
+#endif
         code += method_start + "() { return ";
         code += MakeCamel(field.name, lang_.first_camel_upper);
         code += "(new ";
@@ -887,16 +924,37 @@ void GenStruct(StructDef &struct_def, std::string *code_ptr) {
                field.value.type.element == BASE_TYPE_STRUCT) {
       // Accessors for vectors of structs also take accessor objects, this
       // generates a variant without that argument.
+#if 0
       if (lang_.language != IDLOptions::kCSharp) {
         code += method_start + "(int j) { return ";
         code += MakeCamel(field.name, lang_.first_camel_upper);
         code += "(new " + type_name + "(), j); }\n";
       }
+#else
+      if (lang_.language == IDLOptions::kCSharp) {
+        method_start = "  public " + type_name_dest + " Get" + MakeCamel(field.name, lang_.first_camel_upper);
+        code += method_start + "(int j) { return Get";
+      } else {
+        code += method_start + "(int j) { return ";
+      }
+      code += MakeCamel(field.name, lang_.first_camel_upper);
+      code += "(new " + type_name + "(), j); }\n";
+    } else if (field.value.type.base_type == BASE_TYPE_VECTOR) {
+      if (lang_.language == IDLOptions::kCSharp) {
+        method_start = "  public " + type_name_dest + " Get" + MakeCamel(field.name, lang_.first_camel_upper);
+      }
+#endif
     } else if (field.value.type.base_type == BASE_TYPE_UNION) {
       if (lang_.language == IDLOptions::kCSharp) {
+#if 0
         // Union types in C# use generic Table-derived type for better type
         // safety.
         method_start += "<TTable>";
+#else
+        // union types in C# use generic Table-derived type for better type safety
+        method_start = "  public " + type_name_dest + " Get" + MakeCamel(field.name, lang_.first_camel_upper) + "<TTable>";
+        offset_prefix = " where TTable : Table" + offset_prefix;
+#endif
         type_name = type_name_dest;
       }
     }
@@ -936,12 +994,16 @@ void GenStruct(StructDef &struct_def, std::string *code_ptr) {
     } else {
       switch (field.value.type.base_type) {
         case BASE_TYPE_STRUCT:
+#if 0
           if (lang_.language != IDLOptions::kCSharp) {
             code += "(" + type_name + " obj" + ")";
           } else {
             code += lang_.getter_prefix;
             member_suffix += lang_.getter_suffix;
           }
+#else
+          code += "(" + type_name + " obj" + ")";
+#endif
           if (struct_def.fixed) {
             code += " { return " + obj + ".__assign(" + lang_.accessor_prefix;
             code += "bb_pos + " + NumToString(field.value.offset) + ", ";
@@ -966,8 +1028,12 @@ void GenStruct(StructDef &struct_def, std::string *code_ptr) {
           auto vectortype = field.value.type.VectorType();
           code += "(";
           if (vectortype.base_type == BASE_TYPE_STRUCT) {
+#if 0
             if (lang_.language != IDLOptions::kCSharp)
               code += type_name + " obj, ";
+#else
+            code += type_name + " obj, ";
+#endif
             getter = obj + ".__assign";
           }
           code += "int j)" + offset_prefix + conditional_cast + getter +"(";
@@ -988,6 +1054,7 @@ void GenStruct(StructDef &struct_def, std::string *code_ptr) {
           break;
         }
         case BASE_TYPE_UNION:
+#if 0
           if (lang_.language == IDLOptions::kCSharp) {
             code += "() where TTable : struct, IFlatbufferObject";
             code += offset_prefix + "(TTable?)" + getter;
@@ -996,6 +1063,10 @@ void GenStruct(StructDef &struct_def, std::string *code_ptr) {
             code += "(" + type_name + " obj)" + offset_prefix + getter;
             code += "(obj, o) : null";
           }
+#else
+          code += "(" + type_name + " obj)" + offset_prefix + getter;
+          code += "(obj, o) : null";
+#endif
           break;
         default:
           assert(0);
