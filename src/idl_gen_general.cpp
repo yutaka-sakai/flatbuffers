@@ -618,8 +618,13 @@ std::string GenGetterForLookupByKey(flatbuffers::FieldDef *key_field,
   if (GenTypeBasic(type, false) != "byte") {
     getter += MakeCamel(GenTypeBasic(type, false));
   }
+#if 0
   getter = dest_cast + getter + "(" + GenOffsetGetter(key_field, num) + ")"
     + dest_mask;
+#else
+  getter = "(" + dest_cast + getter + "(" + GenOffsetGetter(key_field, num) + ")"
+    + dest_mask + ")";
+#endif
   return getter;
 }
 
